@@ -1,4 +1,4 @@
-# 🧠 SentimentAI — Real-Time Sentiment Analysis
+# SentimentAI — Real-Time Sentiment Analysis
 
 A full-stack sentiment analysis application with an LSTM-based deep learning model,
 Flask REST API backend, and interactive Streamlit/HTML frontend.
@@ -118,35 +118,6 @@ streamlit run frontend/streamlit_app.py
   "error_count": 0,
   "latency_ms": 28.7
 }
-```
-
----
-
-## 🤖 Model Architecture
-
-```
-Input Text
-    │
-    ▼
-Tokenizer (vocab=5000, max_len=50)
-    │
-    ▼
-Embedding Layer (64-dim, position-weighted average pooling)
-    │   → Simulates LSTM temporal aggregation
-    ▼
-Dense(128, ReLU)  ──→  L2 Regularisation (α=0.001)
-    │
-    ▼
-Dense(64, ReLU)
-    │
-    ▼
-Dense(32, ReLU)
-    │
-    ▼
-Output Dense(3, Softmax)
-    │
-    ▼
-[Negative, Neutral, Positive]
 ```
 
 **Training Config:**
