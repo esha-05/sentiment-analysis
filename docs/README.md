@@ -2,41 +2,6 @@
 
 A full-stack sentiment analysis application with an LSTM-based deep learning model,
 Flask REST API backend, and interactive Streamlit/HTML frontend.
-
----
-
-## 📁 Project Structure
-
-```
-sentiment_app/
-├── sentiment_core.py          # Shared model classes (Tokenizer, Embedding, Pipeline)
-├── requirements.txt           # Python dependencies
-│
-├── model/
-│   ├── train_model.py         # Training script with dataset generation
-│   └── saved/
-│       ├── sentiment_model_pipeline.pkl   # Trained model artifact
-│       └── sentiment_model_meta.json      # Model metadata
-│
-├── backend/
-│   ├── app.py                 # Flask REST API (5 endpoints)
-│   └── tests.py               # Full test suite (54 tests)
-│
-├── frontend/
-│   ├── index.html             # Interactive HTML/JS frontend (standalone)
-│   └── streamlit_app.py       # Streamlit frontend (requires pip install streamlit)
-│
-├── data/
-│   ├── metrics.json           # Evaluation metrics (accuracy, F1, confusion matrix)
-│   └── evaluation_charts.png  # Confusion matrix + per-class bar chart
-│
-├── logs/
-│   └── api.log                # API request/error logs
-│
-└── docs/
-    └── README.md              # This file
-```
-
 ---
 
 ## 🔧 Setup & Installation
@@ -209,47 +174,7 @@ Output Dense(3, Softmax)
 | Negative | 91.97%    | 85.94% | 88.85%| 192     |
 | Neutral  | 91.89%    | 87.95% | 89.88%| 224     |
 | Positive | 86.17%    | 95.65% | 90.67%| 184     |
-
----
-
-## 🐛 Bug Fixes & Debugging
-
-### Bug Fix #1 — Pickle Serialization Error
-**Problem:** When training ran as `__main__`, pickle saved classes under `__main__`
-module path. Loading from a different entry point failed with `AttributeError`.
-
-**Fix:** Extract all pickled classes into `sentiment_core.py` and register the
-module under the canonical name before any pickle load/save:
-```python
-import importlib.util, sys
-spec = importlib.util.spec_from_file_location("sentiment_core", path)
-mod  = importlib.util.module_from_spec(spec)
-sys.modules["sentiment_core"] = mod
-spec.loader.exec_module(mod)
-```
-
-### Bug Fix #2 — Empty Input Index Error
-**Problem:** Empty or whitespace-only input caused `IndexError` during embedding
-when token sequence had length 0.
-
-**Fix:** Centralised `validate_text()` decorator that rejects empty/whitespace
-strings with a `400` response before any model code is reached.
-
-### Bug Fix #3 — Content-Type Not Validated
-**Problem:** Sending non-JSON body with `Content-Type: text/plain` caused an
-unhandled `BadRequest` exception and a 500 response.
-
-**Fix:** `@require_json` decorator checks `request.is_json` and returns `415`
-before any JSON parsing is attempted.
-
-### Bug Fix #4 — Missing Field Causes KeyError
-**Problem:** Requests with missing `text` field raised unhandled `KeyError`
-inside the prediction handler.
-
-**Fix:** Use `body.get("text", "")` + centralised validation which catches the
-empty-string case and returns a structured `400` error with a clear message.
-
----
+--
 
 ## 🧪 API Testing (Postman)
 
@@ -279,13 +204,6 @@ curl -X POST http://localhost:5000/api/predict \
 ```
 
 Run automated test suite:
-```bash
-python3 backend/tests.py
-# → 54/54 tests passing
-```
-
----
-
 ## 🚀 Deployment
 
 ### Local
@@ -293,31 +211,6 @@ python3 backend/tests.py
 python3 backend/app.py
 # → http://localhost:5000
 ```
-
-### Production (Gunicorn)
-```bash
-pip install gunicorn
-gunicorn -w 4 -b 0.0.0.0:5000 "backend.app:app"
-```
-
-### Docker
-```dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-COPY . .
-RUN pip install flask scikit-learn numpy
-RUN python3 -m model.train_model
-EXPOSE 5000
-CMD ["python3", "backend/app.py"]
-```
-
-### Cloud (Railway / Render / Fly.io)
-Add a `Procfile`:
-```
-web: gunicorn -w 2 -b 0.0.0.0:$PORT "backend.app:app"
-```
-
----
 
 ## 📋 Configuration
 
