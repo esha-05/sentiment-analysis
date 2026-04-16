@@ -1,0 +1,43 @@
+{
+  "accuracy": 1.0,
+  "precision": 1.0,
+  "recall": 1.0,
+  "f1_score": 1.0,
+  "confusion_matrix": [
+    [
+      409,
+      0,
+      0
+    ],
+    [
+      0,
+      419,
+      0
+    ],
+    [
+      0,
+      0,
+      372
+    ]
+  ],
+  "per_class": {
+    "Negative": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "support": 409
+    },
+    "Neutral": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "support": 419
+    },
+    "Positive": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "support": 372
+    }
+  }
+}

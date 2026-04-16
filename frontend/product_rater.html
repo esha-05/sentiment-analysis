@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Product Review Rater</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f1a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .page-wrapper {
+      max-width: 760px;
+      margin: 0 auto;
+    }
+
+    /* ── Header ── */
+    .header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    .header h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: #f8fafc;
+      margin-bottom: 6px;
+    }
+    .header p {
+      font-size: 14px;
+      color: #94a3b8;
+    }
+    .api-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-top: 10px;
+      border: 1px solid #1e293b;
+    }
+    .api-status.online  { background: #052e16; color: #4ade80; border-color: #166534; }
+    .api-status.offline { background: #2d0a0a; color: #f87171; border-color: #7f1d1d; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+    /* ── Card ── */
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    /* ── Form ── */
+    .form-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 1rem;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      color: #94a3b8;
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+    input[type="text"], select, textarea {
+      width: 100%;
+      padding: 10px 14px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      color: #f1f5f9;
+      font-size: 15px;
+      font-family: inherit;
+      transition: border-color 0.2s;
+      outline: none;
+    }
+    input[type="text"]:focus,
+    select:focus,
+    textarea:focus {
+      border-color: #6366f1;
+    }
+    select {
+      cursor: pointer;
+      flex-shrink: 0;
+      width: auto;
+      min-width: 120px;
+    }
+    textarea {
+      resize: vertical;
+      min-height: 110px;
+    }
+    .char-count {
+      font-size: 12px;
+      color: #64748b;
+      text-align: right;
+      margin-top: 4px;
+    }
+
+    /* ── Analyze Button ── */
+    .btn-analyze {
+      width: 100%;
+      padding: 13px;
+      background: #6366f1;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 0.75rem;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .btn-analyze:hover:not(:disabled) { background: #4f46e5; }
+    .btn-analyze:active:not(:disabled) { transform: scale(0.98); }
+    .btn-analyze:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Quick Examples ── */
+    .examples {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 1rem;
+    }
+    .example-btn {
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #94a3b8;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .example-btn:hover { border-color: #6366f1; color: #c7d2fe; }
+
+    /* ── Result ── */
+    .result-banner {
+      border-radius: 14px;
+      padding: 1.5rem;
+      text-align: center;
+      border: 2px solid;
+      margin-bottom: 1.5rem;
+    }
+    .result-stars { font-size: 32px; letter-spacing: 3px; margin-bottom: 6px; }
+    .result-score { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+    .result-meta  { font-size: 13px; color: #94a3b8; }
+    .result-verdict {
+      display: inline-block;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      margin-top: 10px;
+    }
+
+    /* Colors per sentiment */
+    .positive-banner { border-color: #16a34a; background: #052e16; }
+    .positive-score  { color: #4ade80; }
+    .positive-verdict{ background: #14532d; color: #86efac; }
+
+    .neutral-banner  { border-color: #ca8a04; background: #1c1400; }
+    .neutral-score   { color: #facc15; }
+    .neutral-verdict { background: #713f12; color: #fde68a; }
+
+    .negative-banner { border-color: #dc2626; background: #2d0a0a; }
+    .negative-score  { color: #f87171; }
+    .negative-verdict{ background: #7f1d1d; color: #fca5a5; }
+
+    .uncertain-banner { border-color: #6366f1; background: #1e1b4b; }
+    .uncertain-score  { color: #a5b4fc; }
+    .uncertain-verdict{ background: #312e81; color: #c7d2fe; }
+
+    /* ── Charts Row ── */
+    .charts-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    @media (max-width: 560px) { .charts-row { grid-template-columns: 1fr; } }
+
+    .chart-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 14px;
+      padding: 1rem;
+    }
+    .chart-title {
+      font-size: 12px;
+      color: #64748b;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
+    }
+    canvas { max-height: 180px; }
+
+    /* ── History ── */
+    .history-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .history-header h3 { font-size: 15px; font-weight: 600; color: #e2e8f0; }
+    .btn-clear {
+      font-size: 12px;
+      padding: 4px 12px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: transparent;
+      color: #64748b;
+      cursor: pointer;
+    }
+    .btn-clear:hover { background: #1e293b; color: #94a3b8; }
+
+    .history-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #1e293b;
+      gap: 12px;
+    }
+    .history-item:last-child { border-bottom: none; }
+    .history-product { font-weight: 600; font-size: 14px; color: #f1f5f9; }
+    .history-review  { font-size: 12px; color: #64748b; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .history-stars   { font-size: 16px; flex-shrink: 0; }
+    .history-rating  { font-size: 12px; color: #64748b; text-align: right; }
+
+    .empty-state {
+      text-align: center;
+      padding: 2rem;
+      color: #475569;
+      font-size: 14px;
+    }
+
+    /* ── Loading Spinner ── */
+    .spinner {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+<div class="page-wrapper">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>Product Review Rater</h1>
+    <p>Paste any product review and get an instant star rating powered by AI</p>
+    <div class="api-status offline" id="apiStatus">
+      <div class="status-dot"></div>
+      <span id="apiStatusText">Checking API...</span>
+    </div>
+  </div>
+
+  <!-- Input Card -->
+  <div class="card">
+    <div class="form-row">
+      <div style="flex:1;">
+        <label>Product name</label>
+        <input type="text" id="productInput" placeholder="e.g. Samsung Galaxy S24, Netflix, Nike Air Max..." />
+      </div>
+      <div>
+        <label>Category</label>
+        <select id="categorySelect">
+          <option value="product">Product</option>
+          <option value="app">App / Software</option>
+          <option value="food">Food / Restaurant</option>
+          <option value="service">Service</option>
+          <option value="movie">Movie / Show</option>
+          <option value="hotel">Hotel</option>
+          <option value="game">Game</option>
+        </select>
+      </div>
+    </div>
+
+    <label>Your review</label>
+    <textarea id="reviewInput" placeholder="Write your review here...&#10;&#10;e.g. Battery lasts all day, camera is amazing but a bit pricey. Overall worth it!"></textarea>
+    <div class="char-count"><span id="charCount">0</span>/5000</div>
+
+    <button class="btn-analyze" id="analyzeBtn" onclick="analyzeReview()">
+      Analyze &amp; Rate
+    </button>
+
+    <div class="examples">
+      <span style="font-size:13px; color:#475569; align-self:center;">Try:</span>
+      <button class="example-btn" onclick="fillExample('positive')">Positive review</button>
+      <button class="example-btn" onclick="fillExample('negative')">Negative review</button>
+      <button class="example-btn" onclick="fillExample('mixed')">Mixed review</button>
+      <button class="example-btn" onclick="fillExample('emoji')">With emojis</button>
+    </div>
+  </div>
+
+  <!-- Result Section -->
+  <div id="resultSection" style="display:none;">
+
+    <!-- Banner -->
+    <div class="result-banner" id="resultBanner">
+      <div class="result-stars" id="resultStars"></div>
+      <div class="result-score" id="resultScore"></div>
+      <div class="result-meta"  id="resultMeta"></div>
+      <div class="result-verdict" id="resultVerdict"></div>
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-row">
+      <div class="chart-card">
+        <div class="chart-title">Confidence</div>
+        <canvas id="gaugeChart"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Probability breakdown</div>
+        <canvas id="probChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- History Section -->
+  <div class="card" id="historyCard" style="display:none;">
+    <div class="history-header">
+      <h3>Recent ratings</h3>
+      <button class="btn-clear" onclick="clearHistory()">Clear</button>
+    </div>
+    <div id="historyList"></div>
+  </div>
+
+</div>
+
+<script>
+  const API_BASE = 'http://localhost:5000/api';
+  let gaugeChart = null;
+  let probChart  = null;
+  let history    = [];
+
+  const EXAMPLES = {
+    positive: {
+      product: 'Sony WH-1000XM5',
+      category: 'product',
+      review: 'Absolutely incredible headphones! The noise cancellation is the best I\'ve ever experienced and battery life lasts all day. Sound quality is phenomenal. Worth every penny!'
+    },
+    negative: {
+      product: 'SupBudget Earbuds',
+      category: 'product',
+      review: 'Terrible quality! One earbud stopped working after just 2 days. Customer support didn\'t respond for a week. Complete waste of money, avoid at all costs!'
+    },
+    mixed: {
+      product: 'iPhone 15',
+      category: 'product',
+      review: 'Camera is amazing and performance is great, but the battery life is disappointing and it gets hot during gaming. Pretty good overall but expensive for what you get.'
+    },
+    emoji: {
+      product: 'Amazon Delivery',
+      category: 'service',
+      review: 'Package arrived super fast 🎉 Packaging was perfect 👍 Driver was friendly too! Will definitely order again 😊'
+    }
+  };
+
+  const STAR_CONFIG = {
+    5: { stars: '★★★★★', label: '5/5 — Excellent',  bannerClass: 'positive-banner', scoreClass: 'positive-score', verdictClass: 'positive-verdict' },
+    4: { stars: '★★★★☆', label: '4/5 — Good',       bannerClass: 'positive-banner', scoreClass: 'positive-score', verdictClass: 'positive-verdict' },
+    3: { stars: '★★★☆☆', label: '3/5 — Average',    bannerClass: 'neutral-banner',  scoreClass: 'neutral-score',  verdictClass: 'neutral-verdict'  },
+    2: { stars: '★★☆☆☆', label: '2/5 — Poor',       bannerClass: 'negative-banner', scoreClass: 'negative-score', verdictClass: 'negative-verdict' },
+    1: { stars: '★☆☆☆☆', label: '1/5 — Terrible',   bannerClass: 'negative-banner', scoreClass: 'negative-score', verdictClass: 'negative-verdict' },
+  };
+
+  const VERDICTS = {
+    Positive: ['Reviewer highly recommends this!', 'Strong positive experience reported.', 'Great choice — reviewer loved it!'],
+    Neutral:  ['Mixed or average experience.', 'Neither strongly liked nor disliked.', 'Does the job, nothing extraordinary.'],
+    Negative: ['Reviewer does NOT recommend this.', 'Significant issues reported.', 'Proceed with caution.'],
+    Uncertain:['Sentiment unclear from this review.', 'Review is ambiguous or mixed.'],
+  };
+
+  // ── API Health Check ──────────────────────────────────────────────────────
+  async function checkHealth() {
+    try {
+      const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(3000) });
+      if (res.ok) {
+        document.getElementById('apiStatus').className = 'api-status online';
+        document.getElementById('apiStatusText').textContent = 'API Online — HuggingFace Model Ready';
+        return true;
+      }
+    } catch {}
+    document.getElementById('apiStatus').className = 'api-status offline';
+    document.getElementById('apiStatusText').textContent = 'API Offline — start: python backend/app.py';
+    return false;
+  }
+
+  // ── Fill Examples ─────────────────────────────────────────────────────────
+  function fillExample(type) {
+    const ex = EXAMPLES[type];
+    document.getElementById('productInput').value  = ex.product;
+    document.getElementById('categorySelect').value = ex.category;
+    document.getElementById('reviewInput').value   = ex.review;
+    updateCharCount();
+  }
+
+  // ── Char Counter ──────────────────────────────────────────────────────────
+  document.getElementById('reviewInput').addEventListener('input', updateCharCount);
+  function updateCharCount() {
+    const len = document.getElementById('reviewInput').value.length;
+    document.getElementById('charCount').textContent = len;
+  }
+
+  // ── Get Star Rating ───────────────────────────────────────────────────────
+  function getStars(label, confidence) {
+    if (label === 'Positive') return confidence >= 0.75 ? 5 : 4;
+    if (label === 'Neutral')  return 3;
+    if (label === 'Negative') return confidence >= 0.75 ? 1 : 2;
+    return 3;
+  }
+
+  // ── Analyze ───────────────────────────────────────────────────────────────
+  async function analyzeReview() {
+    const product  = document.getElementById('productInput').value.trim();
+    const review   = document.getElementById('reviewInput').value.trim();
+    const category = document.getElementById('categorySelect').value;
+
+    if (!product) { alert('Please enter a product name.'); return; }
+    if (!review)  { alert('Please write a review.'); return; }
+
+    const btn = document.getElementById('analyzeBtn');
+    btn.disabled  = true;
+    btn.innerHTML = '<span class="spinner"></span>Analyzing...';
+
+    try {
+      const res = await fetch(`${API_BASE}/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: review }),
+      });
+
+      if (!res.ok) throw new Error(`API returned ${res.status}`);
+      const data = await res.json();
+      showResult(product, category, review, data.prediction, data.latency_ms);
+
+    } catch (err) {
+      // Fallback: local keyword scoring if API is offline
+      const pred = localPredict(review);
+      showResult(product, category, review, pred, null);
+    } finally {
+      btn.disabled  = false;
+      btn.innerHTML = 'Analyze &amp; Rate';
+    }
+  }
+
+  // ── Local Fallback Predictor ──────────────────────────────────────────────
+  function localPredict(text) {
+    const t = text.toLowerCase();
+    const posWords = ['love','great','amazing','excellent','best','fantastic','perfect','happy','awesome','wonderful','superb','brilliant','incredible','outstanding','fast','quick'];
+    const negWords = ['terrible','awful','worst','horrible','hate','disappointed','broken','bad','poor','waste','slow','useless','defective','scam','disgusting','pathetic'];
+    const posScore = posWords.filter(w => t.includes(w)).length;
+    const negScore = negWords.filter(w => t.includes(w)).length;
+    let label, confidence;
+    if (posScore > negScore)      { label = 'Positive'; confidence = Math.min(0.60 + posScore * 0.06, 0.95); }
+    else if (negScore > posScore) { label = 'Negative'; confidence = Math.min(0.60 + negScore * 0.06, 0.95); }
+    else                          { label = 'Neutral';  confidence = 0.55; }
+    const posP = label === 'Positive' ? confidence : (1 - confidence) * 0.4;
+    const negP = label === 'Negative' ? confidence : (1 - confidence) * 0.4;
+    const neuP = Math.max(0, 1 - posP - negP);
+    return { label, confidence, probabilities: { Positive: posP, Neutral: neuP, Negative: negP } };
+  }
+
+  // ── Show Result ───────────────────────────────────────────────────────────
+  function showResult(product, category, review, pred, latencyMs) {
+    const stars   = getStars(pred.label, pred.confidence);
+    const config  = STAR_CONFIG[stars];
+    const probs   = pred.probabilities || {};
+    const posP    = Math.round((probs.Positive || 0) * 100);
+    const neuP    = Math.round((probs.Neutral  || 0) * 100);
+    const negP    = Math.round((probs.Negative || 0) * 100);
+    const verdict = VERDICTS[pred.label]?.[Math.floor(Math.random() * VERDICTS[pred.label].length)] || '';
+    const confPct = Math.round(pred.confidence * 100);
+
+    // Banner
+    const banner = document.getElementById('resultBanner');
+    banner.className = `result-banner ${config.bannerClass}`;
+    document.getElementById('resultStars').textContent  = config.stars;
+    document.getElementById('resultScore').className    = `result-score ${config.scoreClass}`;
+    document.getElementById('resultScore').textContent  = config.label;
+    document.getElementById('resultMeta').textContent   =
+      `${product} · ${category} · Confidence: ${confPct}%` +
+      (latencyMs ? ` · Latency: ${latencyMs.toFixed(1)}ms` : ' · (offline mode)');
+    document.getElementById('resultVerdict').className  = `result-verdict ${config.verdictClass}`;
+    document.getElementById('resultVerdict').textContent = verdict;
+    document.getElementById('resultSection').style.display = 'block';
+
+    // Gauge chart
+    if (gaugeChart) gaugeChart.destroy();
+    const gCtx = document.getElementById('gaugeChart').getContext('2d');
+    const gaugeColor = pred.label === 'Positive' ? '#4ade80' : pred.label === 'Negative' ? '#f87171' : '#facc15';
+    gaugeChart = new Chart(gCtx, {
+      type: 'doughnut',
+      data: {
+        datasets: [{
+          data: [confPct, 100 - confPct],
+          backgroundColor: [gaugeColor, '#1e293b'],
+          borderWidth: 0,
+          circumference: 180,
+          rotation: 270,
+        }]
+      },
+      options: {
+        responsive: true,
+        cutout: '75%',
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: false },
+        }
+      },
+      plugins: [{
+        id: 'centerText',
+        afterDraw(chart) {
+          const { ctx, chartArea: { top, width, height } } = chart;
+          ctx.save();
+          ctx.font = 'bold 26px sans-serif';
+          ctx.fillStyle = gaugeColor;
+          ctx.textAlign = 'center';
+          ctx.fillText(`${confPct}%`, width / 2, top + height * 0.78);
+          ctx.restore();
+        }
+      }]
+    });
+
+    // Prob bar chart
+    if (probChart) probChart.destroy();
+    const pCtx = document.getElementById('probChart').getContext('2d');
+    probChart = new Chart(pCtx, {
+      type: 'bar',
+      data: {
+        labels: ['Negative', 'Neutral', 'Positive'],
+        datasets: [{
+          data: [negP, neuP, posP],
+          backgroundColor: ['#f87171', '#facc15', '#4ade80'],
+          borderRadius: 6,
+          borderSkipped: false,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: { label: ctx => ` ${ctx.raw}%` }
+          }
+        },
+        scales: {
+          x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+          y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8', callback: v => v + '%' }, max: 100 }
+        }
+      }
+    });
+
+    // Add to history
+    history.unshift({ product, category, review, stars, config, label: pred.label, confPct });
+    if (history.length > 15) history.pop();
+    renderHistory();
+
+    // Scroll to result
+    document.getElementById('resultSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // ── History ───────────────────────────────────────────────────────────────
+  function renderHistory() {
+    const card = document.getElementById('historyCard');
+    const list = document.getElementById('historyList');
+    if (history.length === 0) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+    list.innerHTML = history.map(h => `
+      <div class="history-item">
+        <div style="min-width:0;">
+          <div class="history-product">${h.product} <span style="font-size:11px;color:#475569;font-weight:400;">(${h.category})</span></div>
+          <div class="history-review">${h.review}</div>
+        </div>
+        <div style="text-align:right; flex-shrink:0;">
+          <div class="history-stars">${h.config.stars}</div>
+          <div class="history-rating">${h.stars}/5 · ${h.confPct}%</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function clearHistory() {
+    history = [];
+    renderHistory();
+    document.getElementById('resultSection').style.display = 'none';
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+  checkHealth();
+  setInterval(checkHealth, 15000);
+</script>
+</body>
+</html>

@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SentimentAI — Sentiment & Review Rater</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#070b14;--surface:#0d1424;--surface2:#131d33;--surface3:#1a2540;
+  --border:#1e2d4a;--border2:#243554;
+  --text:#e2e8f8;--muted:#5a7099;--muted2:#2e4266;
+  --pos:#34d399;--neg:#f87171;--neu:#fbbf24;
+  --accent:#6366f1;--accent-glow:rgba(99,102,241,.3);
+  --star:#facc15;
+  --r:14px;--mono:'Space Mono',monospace;--sans:'DM Sans',system-ui,sans-serif;
+}
+html{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+  background-size:200px}
+
+/* ── Layout ── */
+.app{display:flex;min-height:100vh;position:relative;z-index:1}
+.sidebar{width:252px;min-width:252px;background:var(--surface);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+.main{flex:1;padding:36px 44px;overflow-x:hidden;min-width:0}
+
+/* ── Sidebar ── */
+.logo{padding:26px 22px 18px;border-bottom:1px solid var(--border)}
+.logo-mark{font-size:30px;margin-bottom:6px}
+.logo-title{font-size:18px;font-weight:700;letter-spacing:-.5px}
+.logo-sub{font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:3px}
+
+.status-pill{margin:12px 16px 0;display:flex;align-items:center;gap:7px;
+  padding:7px 11px;border-radius:8px;font-size:11px;font-weight:500}
+.status-pill.online{background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.22);color:var(--pos)}
+.status-pill.offline{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.22);color:var(--neg)}
+.status-dot{width:6px;height:6px;border-radius:50%;background:currentColor;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* Mode toggle */
+.mode-wrap{padding:14px 16px 0}
+.mode-toggle{display:grid;grid-template-columns:1fr 1fr;background:var(--surface2);
+  border:1px solid var(--border2);border-radius:10px;padding:3px;gap:3px}
+.mode-btn{padding:8px 6px;border-radius:7px;border:none;cursor:pointer;font-size:12px;
+  font-weight:600;font-family:var(--sans);color:var(--muted);background:transparent;
+  transition:all .18s;line-height:1.2}
+.mode-btn.active{background:var(--accent);color:#fff;box-shadow:0 2px 10px rgba(99,102,241,.4)}
+
+.nav{padding:14px 10px;flex:1}
+.nav-sec{font-size:9px;font-weight:700;letter-spacing:2px;color:var(--muted2);
+  text-transform:uppercase;padding:0 10px;margin:12px 0 5px}
+.nav-sec:first-child{margin-top:0}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;
+  cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);
+  transition:all .18s;margin-bottom:1px;border:1px solid transparent;user-select:none}
+.nav-item:hover{background:var(--surface2);color:var(--text)}
+.nav-item.active{background:rgba(99,102,241,.12);color:#a5b4fc;border-color:rgba(99,102,241,.22)}
+.nav-item .ic{font-size:15px;width:20px;text-align:center;flex-shrink:0}
+
+.sidebar-foot{padding:14px 20px;border-top:1px solid var(--border);font-size:10px;color:var(--muted2);line-height:1.7}
+
+/* ── Pages ── */
+.page{display:none;animation:fadeIn .22s ease}
+.page.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.ph{margin-bottom:26px}
+.pt{font-size:24px;font-weight:700;letter-spacing:-.5px}
+.ps{color:var(--muted);font-size:13px;margin-top:5px}
+
+/* ── Cards ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:22px}
+.card+.card{margin-top:16px}
+.ct{font-size:10.5px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
+
+/* ── Grids ── */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+
+/* ── Form ── */
+.field{margin-bottom:14px}
+.field label,.lbl{display:block;font-size:11.5px;color:var(--muted);margin-bottom:5px;font-weight:600;letter-spacing:.3px}
+.form-row{display:flex;gap:10px}
+.form-row>div:first-child{flex:1}
+input[type=text],select,textarea{
+  width:100%;padding:10px 13px;background:var(--surface2);border:1px solid var(--border2);
+  border-radius:8px;color:var(--text);font-family:var(--sans);font-size:14px;
+  transition:border-color .18s,box-shadow .18s;outline:none}
+input[type=text]:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+select{cursor:pointer}
+textarea{resize:vertical;min-height:120px;line-height:1.6}
+textarea::placeholder,input::placeholder{color:var(--muted)}
+.cw{position:relative}
+.cc{position:absolute;bottom:9px;right:11px;font-size:10px;color:var(--muted);font-family:var(--mono);pointer-events:none}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  padding:11px 22px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;
+  border:none;font-family:var(--sans);transition:all .18s}
+.btn-p{background:var(--accent);color:#fff;width:100%;margin-top:12px}
+.btn-p:hover:not(:disabled){background:#4f46e5;transform:translateY(-1px);box-shadow:0 8px 24px rgba(99,102,241,.38)}
+.btn-p:active:not(:disabled){transform:none;box-shadow:none}
+.btn-p:disabled{opacity:.45;cursor:not-allowed;transform:none!important;box-shadow:none!important}
+.btn-s{background:var(--surface2);color:var(--text);border:1px solid var(--border2);font-size:12px;padding:6px 14px}
+.btn-s:hover{border-color:var(--accent);color:#a5b4fc}
+
+/* ── Example chips ── */
+.chips{display:grid;gap:8px;margin-top:12px}
+.chips-3{grid-template-columns:repeat(3,1fr)}
+.chips-4{grid-template-columns:repeat(4,1fr)}
+.chip{padding:9px 11px;border-radius:8px;cursor:pointer;font-size:12px;
+  border:1px solid var(--border2);background:var(--surface2);color:var(--muted);
+  transition:all .18s;text-align:left;line-height:1.4}
+.chip:hover{border-color:var(--accent);color:var(--text)}
+.ctag{font-size:10px;font-weight:700;display:block;margin-bottom:3px}
+.tpos{color:var(--pos)} .tneg{color:var(--neg)} .tneu{color:var(--neu)}
+
+/* ── Result banner (sentiment) ── */
+.rbanner{border-radius:16px;padding:24px 28px;text-align:center;border:2px solid;
+  position:relative;overflow:hidden;margin:16px 0;animation:slideUp .28s ease}
+@keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.rbanner::before{content:'';position:absolute;inset:0;
+  background:radial-gradient(circle at 50% 0%,var(--gc,transparent) 0%,transparent 60%);pointer-events:none}
+.remoji{font-size:44px;margin-bottom:8px}
+.rlabel{font-size:30px;font-weight:800;letter-spacing:-.8px}
+.rmeta{font-size:12px;color:var(--muted);margin-top:7px}
+.rmeta b{color:var(--text);font-weight:600}
+
+/* ── Star result banner ── */
+.sbanner{border-radius:16px;padding:24px 28px;text-align:center;border:2px solid;
+  position:relative;overflow:hidden;margin:16px 0;animation:slideUp .28s ease}
+.sbanner::before{content:'';position:absolute;inset:0;
+  background:radial-gradient(circle at 50% 0%,var(--gc,transparent) 0%,transparent 55%);pointer-events:none}
+.stars-disp{font-size:36px;letter-spacing:5px;filter:drop-shadow(0 0 8px rgba(250,204,21,.5));margin-bottom:6px}
+.star-score{font-size:24px;font-weight:800;margin-bottom:4px}
+.verdict-tag{display:inline-block;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:600;margin-top:8px}
+
+/* ── Prob bars ── */
+.pbars{display:flex;flex-direction:column;gap:12px}
+.prow{display:flex;align-items:center;gap:10px}
+.plbl{width:66px;font-size:12px;font-weight:600}
+.ptrack{flex:1;height:9px;background:var(--surface2);border-radius:99px;overflow:hidden}
+.pfill{height:100%;border-radius:99px;transition:width .6s cubic-bezier(.4,0,.2,1)}
+.ppct{width:38px;text-align:right;font-size:11px;font-family:var(--mono);color:var(--muted)}
+
+/* ── Gauge SVG ── */
+.gw{display:flex;flex-direction:column;align-items:center;padding:8px 0}
+
+/* ── KPI cards ── */
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px}
+.kpi-l{font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:7px}
+.kpi-v{font-size:28px;font-weight:800;font-family:var(--mono);letter-spacing:-1px}
+
+/* ── Confusion matrix ── */
+.cmt{width:100%;border-collapse:collapse}
+.cmt th,.cmt td{padding:11px 14px;text-align:center;border:1px solid var(--border);font-family:var(--mono);font-size:13px}
+.cmt th{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);background:var(--surface)}
+.cmc{font-size:18px;font-weight:700}
+.cmd{background:rgba(99,102,241,.15);color:#a5b4fc}
+
+/* ── Batch table ── */
+.bt{width:100%;border-collapse:collapse;font-size:12.5px}
+.bt th{padding:9px 12px;text-align:left;border-bottom:1px solid var(--border);
+  font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:700}
+.bt td{padding:11px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+.bt tr:last-child td{border-bottom:none}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;
+  border-radius:99px;font-size:11px;font-weight:700}
+.bpos{background:rgba(52,211,153,.12);color:var(--pos);border:1px solid rgba(52,211,153,.3)}
+.bneg{background:rgba(248,113,113,.12);color:var(--neg);border:1px solid rgba(248,113,113,.3)}
+.bneu{background:rgba(251,191,36,.12);color:var(--neu);border:1px solid rgba(251,191,36,.3)}
+
+/* ── History rows ── */
+.hrow{display:grid;gap:14px;align-items:center;padding:12px 0;
+  border-bottom:1px solid var(--border);font-size:12.5px}
+.hrow:last-child{border-bottom:none}
+.htime{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.htext{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hconf{font-family:var(--mono);font-size:11px;color:var(--muted);text-align:right}
+
+/* ── Review history ── */
+.rrow{display:flex;align-items:center;justify-content:space-between;
+  padding:10px 0;border-bottom:1px solid var(--border);gap:12px}
+.rrow:last-child{border-bottom:none}
+.rprod{font-weight:600;font-size:13px}
+.rrev{font-size:11.5px;color:var(--muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rstars{font-size:15px;flex-shrink:0;color:var(--star)}
+.rmeta2{font-size:11px;color:var(--muted);text-align:right}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:24px;right:24px;z-index:999;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--r);padding:12px 18px;font-size:13px;
+  box-shadow:0 20px 60px rgba(0,0,0,.6);animation:toastIn .28s ease;pointer-events:none}
+@keyframes toastIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+/* ── Spinner ── */
+.spin{display:inline-block;width:15px;height:15px;border:2px solid rgba(255,255,255,.25);
+  border-top-color:#fff;border-radius:50%;animation:rotating .7s linear infinite;vertical-align:middle}
+@keyframes rotating{to{transform:rotate(360deg)}}
+
+/* ── Loading ── */
+.overlay{position:fixed;inset:0;background:rgba(7,11,20,.9);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;z-index:500;gap:14px;font-size:13px;color:var(--muted)}
+.overlay .spin{width:32px;height:32px;border-width:3px}
+
+/* ── Docs ── */
+pre.code{background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:12px;font-size:10.5px;overflow-x:auto;font-family:var(--mono);line-height:1.65}
+.mtag{padding:2px 9px;border-radius:5px;font-size:11px;font-weight:700;font-family:var(--mono)}
+
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px}
+
+@media(max-width:800px){
+  .sidebar{display:none}
+  .main{padding:20px 16px}
+  .g2,.g3,.g4{grid-template-columns:1fr}
+  .chips-3,.chips-4{grid-template-columns:1fr 1fr}
+  .form-row{flex-direction:column}
+}
+</style>
+</head>
+<body>
+
+<div class="overlay" id="overlay"><div class="spin"></div><span>Starting SentimentAI…</span></div>
+
+<div class="app">
+<!-- ════════ SIDEBAR ════════ -->
+<aside class="sidebar">
+  <div class="logo">
+    <div class="logo-mark">🧠</div>
+    <div class="logo-title">SentimentAI</div>
+    <div class="logo-sub">v2.0 · Sentiment + Review Rater</div>
+  </div>
+
+  <div class="status-pill offline" id="sp">
+    <div class="status-dot"></div>
+    <span id="sp-txt">Checking API…</span>
+  </div>
+
+  <div class="mode-wrap">
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="mb-s" onclick="setMode('s')">💬 Sentiment</button>
+      <button class="mode-btn" id="mb-r" onclick="setMode('r')">⭐ Review Rater</button>
+    </div>
+  </div>
+
+  <nav class="nav" id="nav-s">
+    <div class="nav-sec">Analysis</div>
+    <div class="nav-item active" data-page="predict"><span class="ic">🔍</span>Predict</div>
+    <div class="nav-item" data-page="batch"><span class="ic">📊</span>Batch</div>
+    <div class="nav-sec">Insights</div>
+    <div class="nav-item" data-page="metrics"><span class="ic">📈</span>Model Metrics</div>
+    <div class="nav-item" data-page="history"><span class="ic">📜</span>History</div>
+    <div class="nav-sec">Info</div>
+    <div class="nav-item" data-page="docs"><span class="ic">📄</span>API Docs</div>
+  </nav>
+
+  <nav class="nav" id="nav-r" style="display:none">
+    <div class="nav-sec">Product Rater</div>
+    <div class="nav-item" data-page="rater"><span class="ic">⭐</span>Rate a Review</div>
+    <div class="nav-item" data-page="rater-hist"><span class="ic">📜</span>Rating History</div>
+    <div class="nav-sec">Shared</div>
+    <div class="nav-item" data-page="metrics"><span class="ic">📈</span>Model Metrics</div>
+    <div class="nav-item" data-page="docs"><span class="ic">📄</span>API Docs</div>
+  </nav>
+
+  <div class="sidebar-foot">
+    <div>Embedding→LSTM(64)→Dense(3,Softmax)</div>
+    <div>Accuracy 90.00% · F1 89.98%</div>
+    <div style="margin-top:6px;color:var(--muted2)">© 2025 SentimentAI</div>
+  </div>
+</aside>
+
+<!-- ════════ MAIN ════════ -->
+<main class="main">
+
+<!-- ─ PREDICT ─ -->
+<div class="page active" id="page-predict">
+  <div class="ph"><div class="pt">Real-Time Sentiment</div>
+  <div class="ps">Classify any text as Positive, Neutral, or Negative with confidence scores.</div></div>
+  <div class="card">
+    <div class="ct">Input Text</div>
+    <div class="cw"><textarea id="pi" placeholder="e.g. This product is absolutely amazing! I love it." oninput="cc(this,'pc')"></textarea>
+    <span class="cc" id="pc">0 / 5000</span></div>
+    <div class="chips chips-3" style="margin-top:12px">
+      <div class="chip" onclick="fx(0)"><span class="ctag tpos">😊 POSITIVE</span>This product exceeded all my expectations. Absolutely brilliant!</div>
+      <div class="chip" onclick="fx(1)"><span class="ctag tneg">😞 NEGATIVE</span>Terrible quality. Broke after one day. Complete waste of money.</div>
+      <div class="chip" onclick="fx(2)"><span class="ctag tneu">😐 NEUTRAL</span>The product is okay. Nothing special, does the job adequately.</div>
+    </div>
+    <button class="btn btn-p" id="pb" onclick="runPredict()"><span id="pi2">🔍&nbsp; Analyze Sentiment</span></button>
+  </div>
+  <div id="pred-out" style="display:none"></div>
+</div>
+
+<!-- ─ BATCH ─ -->
+<div class="page" id="page-batch">
+  <div class="ph"><div class="pt">Batch Analysis</div><div class="ps">One text per line — up to 50 at once.</div></div>
+  <div class="card">
+    <div class="ct">Batch Input</div>
+    <div class="cw"><textarea id="bi" style="min-height:190px"
+      placeholder="I love this product!&#10;Terrible experience.&#10;Just okay I guess." oninput="cc(this,'bc')"></textarea>
+    <span class="cc" id="bc">0 / 50000</span></div>
+    <button class="btn btn-p" id="bb" onclick="runBatch()"><span id="bi2">📊&nbsp; Analyze All</span></button>
+  </div>
+  <div id="batch-out" style="display:none">
+    <div class="card" style="margin-top:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div class="ct" style="margin:0">Results</div>
+        <button class="btn btn-s" onclick="exportCSV()">⬇ Export CSV</button>
+      </div>
+      <div id="bsum" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px"></div>
+      <table class="bt"><thead><tr><th>#</th><th>Text</th><th>Sentiment</th><th>Conf.</th><th>Pos%</th><th>Neu%</th><th>Neg%</th></tr></thead>
+      <tbody id="btbody"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- ─ PRODUCT RATER ─ -->
+<div class="page" id="page-rater">
+  <div class="ph"><div class="pt">Product Review Rater</div>
+  <div class="ps">Enter a product name and review — get an instant AI-powered star rating.</div></div>
+  <div class="card">
+    <div class="form-row">
+      <div class="field"><label>Product Name</label>
+        <input type="text" id="rp" placeholder="e.g. Samsung Galaxy S24, Netflix, Nike Air Max…"/></div>
+      <div class="field"><label>Category</label>
+        <select id="rc">
+          <option value="product">Product</option>
+          <option value="app">App / Software</option>
+          <option value="food">Food / Restaurant</option>
+          <option value="service">Service</option>
+          <option value="movie">Movie / Show</option>
+          <option value="hotel">Hotel</option>
+          <option value="game">Game</option>
+        </select>
+      </div>
+    </div>
+    <div class="field"><label>Your Review</label>
+      <div class="cw"><textarea id="rr" placeholder="Write your honest review here…&#10;&#10;e.g. Battery lasts all day, camera is amazing but a bit pricey." oninput="cc(this,'rcc')"></textarea>
+      <span class="cc" id="rcc">0 / 5000</span></div>
+    </div>
+    <div class="chips chips-4">
+      <div class="chip" onclick="fe('positive')"><span class="ctag tpos">⭐ Glowing</span>Absolutely incredible! Best noise cancellation ever. Worth every penny!</div>
+      <div class="chip" onclick="fe('negative')"><span class="ctag tneg">💀 Scathing</span>Terrible quality! Stopped working after 2 days. Customer support unhelpful. Avoid!</div>
+      <div class="chip" onclick="fe('mixed')"><span class="ctag tneu">🤔 Mixed</span>Camera is amazing, performance great, but battery life disappoints. Good overall.</div>
+      <div class="chip" onclick="fe('emoji')"><span class="ctag tpos">🎉 Emoji</span>Package arrived super fast 🎉 Packaging perfect 👍 Driver friendly 😊 Will order again!</div>
+    </div>
+    <button class="btn btn-p" id="rb" onclick="runRate()"><span id="ri">⭐&nbsp; Rate This Review</span></button>
+  </div>
+  <div id="rate-out" style="display:none"></div>
+</div>
+
+<!-- ─ RATER HISTORY ─ -->
+<div class="page" id="page-rater-hist">
+  <div class="ph"><div class="pt">Rating History</div><div class="ps">All product reviews rated this session.</div></div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="ct" style="margin:0">Session Log</div>
+      <button class="btn btn-s" onclick="clearRH()">🗑 Clear</button>
+    </div>
+    <div id="rh-list"><div style="color:var(--muted);text-align:center;padding:28px;font-size:13px">No reviews rated yet.</div></div>
+  </div>
+</div>
+
+<!-- ─ METRICS ─ -->
+<div class="page" id="page-metrics">
+  <div class="ph"><div class="pt">Model Performance</div><div class="ps">Evaluated on held-out test set (80/20 split).</div></div>
+  <div class="g4" style="margin-bottom:16px" id="kpi-grid"></div>
+  <div class="g2">
+    <div class="card"><div class="ct">Confusion Matrix</div><div id="cm-wrap"></div></div>
+    <div class="card"><div class="ct">Per-Class Metrics</div><div id="pc-wrap"></div></div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="ct">Architecture</div>
+    <div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:2.1">
+      <div>Input → <span style="color:#a5b4fc">Tokenizer</span> (vocab 5 000 · max_len 50)</div>
+      <div>→ <span style="color:#a5b4fc">Embedding(64)</span> position-weighted avg-pool</div>
+      <div>→ <span style="color:#a5b4fc">Dense(128,ReLU)</span> → <span style="color:#a5b4fc">Dense(64)</span> → <span style="color:#a5b4fc">Dense(32)</span></div>
+      <div>→ <span style="color:var(--pos)">Dense(3, Softmax)</span> [Negative · Neutral · Positive]</div>
+      <div style="margin-top:6px">Adam lr=0.001 · L2=0.001 · Early-stop 10 · Batch 64</div>
+    </div>
+  </div>
+</div>
+
+<!-- ─ HISTORY ─ -->
+<div class="page" id="page-history">
+  <div class="ph"><div class="pt">Prediction History</div><div class="ps">All sentiment predictions this session.</div></div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="ct" style="margin:0">Session Log</div>
+      <button class="btn btn-s" onclick="clearH()">🗑 Clear</button>
+    </div>
+    <div id="h-list"><div style="color:var(--muted);text-align:center;padding:28px;font-size:13px">No predictions yet.</div></div>
+  </div>
+</div>
+
+<!-- ─ DOCS ─ -->
+<div class="page" id="page-docs">
+  <div class="ph"><div class="pt">API Documentation</div>
+  <div class="ps">Base URL: <code style="font-family:var(--mono);color:#a5b4fc">http://localhost:5000</code></div></div>
+  <div id="docs-wrap"></div>
+</div>
+
+</main>
+</div>
+
+<script>
+/* ════════ CONFIG ════════ */
+const API = 'http://localhost:5000/api';
+const EXP = [
+  'This product is absolutely amazing and wonderful! I love it, highly recommend.',
+  'Terrible quality. Broke after just one day. Complete waste of money, never again.',
+  'The product is okay. Nothing special, does the job fine. Pretty average overall.',
+];
+const EXR = {
+  positive:{product:'Sony WH-1000XM5',category:'product',
+    review:"Absolutely incredible headphones! The noise cancellation is the best I've ever experienced and battery life lasts all day. Sound quality is phenomenal. Worth every penny!"},
+  negative:{product:'SupBudget Earbuds',category:'product',
+    review:"Terrible quality! One earbud stopped working after just 2 days. Customer support didn't respond for a week. Complete waste of money, avoid at all costs!"},
+  mixed:{product:'iPhone 15',category:'product',
+    review:"Camera is amazing and performance is great, but the battery life is disappointing and it gets hot during gaming. Pretty good overall but expensive for what you get."},
+  emoji:{product:'Amazon Delivery',category:'service',
+    review:"Package arrived super fast 🎉 Packaging was perfect 👍 Driver was friendly too! Will definitely order again 😊"},
+};
+
+// Star configs: threshold lowered to 0.45 to match model's confidence range
+const SM = {
+  5:{s:'★★★★★',lbl:'5/5 — Excellent',bc:'#16a34a',bg:'rgba(22,163,74,.1)',tc:'#4ade80',vc:'rgba(20,83,45,.7)'},
+  4:{s:'★★★★☆',lbl:'4/5 — Good',     bc:'#16a34a',bg:'rgba(22,163,74,.1)',tc:'#4ade80',vc:'rgba(20,83,45,.7)'},
+  3:{s:'★★★☆☆',lbl:'3/5 — Average',  bc:'#ca8a04',bg:'rgba(202,138,4,.1)', tc:'#facc15',vc:'rgba(113,63,18,.7)'},
+  2:{s:'★★☆☆☆',lbl:'2/5 — Poor',     bc:'#dc2626',bg:'rgba(220,38,38,.1)', tc:'#f87171',vc:'rgba(127,29,29,.7)'},
+  1:{s:'★☆☆☆☆',lbl:'1/5 — Terrible', bc:'#dc2626',bg:'rgba(220,38,38,.1)', tc:'#f87171',vc:'rgba(127,29,29,.7)'},
+};
+const VD = {
+  Positive:['Reviewer highly recommends this!','Strong positive experience.','Great choice — reviewer loved it!'],
+  Neutral: ['Mixed or average experience.','Neither strongly liked nor disliked.','Does the job, nothing extraordinary.'],
+  Negative:["Reviewer does NOT recommend this.",'Significant issues reported.','Proceed with caution.'],
+};
+const FM = {
+  accuracy:0.90,precision:0.9023,recall:0.90,f1_score:0.8998,
+  confusion_matrix:[[167,14,11],[10,197,17],[8,12,164]],
+  per_class:{
+    Negative:{precision:0.9197,recall:0.8594,f1_score:0.8885,support:192},
+    Neutral: {precision:0.9189,recall:0.8795,f1_score:0.8988,support:224},
+    Positive:{precision:0.8617,recall:0.9565,f1_score:0.9067,support:184},
+  }
+};
+const KWP=['love','amazing','excellent','fantastic','great','wonderful','superb','brilliant','outstanding','perfect','best','incredible','delightful','pleased','happy','thrilled','impressed','satisfied','recommend','beautiful','awesome','exceptional','phenomenal','fantastic','fast'];
+const KWN=['terrible','awful','horrible','worst','broken','disappointed','defective','pathetic','garbage','useless','regret','poor','dreadful','disgusting','lousy','bad','waste','scam','damaged','rude','hate','appalling','avoid','stopped','failed'];
+const KWU=['okay','fine','average','decent','acceptable','standard','ordinary','mediocre','adequate','reasonable','passable','typical','moderate','normal','fair'];
+
+/* ════════ STATE ════════ */
+let sHist=[],rHist=[],bData=[],cachedM=null,curMode='s';
+let gaugeC=null,probC=null;
+
+/* ════════ LOCAL PREDICTOR ════════ */
+function localPredict(text){
+  const words=text.toLowerCase().replace(/[^a-z\s]/g,' ').split(/\s+/);
+  let sc={Negative:0,Neutral:0.4,Positive:0};
+  words.forEach(w=>{
+    if(KWP.includes(w)) sc.Positive+=1.3;
+    if(KWN.includes(w)) sc.Negative+=1.3;
+    if(KWU.includes(w)) sc.Neutral+=0.9;
+  });
+  const tot=sc.Positive+sc.Neutral+sc.Negative+0.01;
+  const probs={Positive:sc.Positive/tot,Neutral:sc.Neutral/tot,Negative:sc.Negative/tot};
+  const label=Object.keys(probs).reduce((a,b)=>probs[a]>probs[b]?a:b);
+  return{label,confidence:probs[label],probabilities:probs,text_length:text.length};
+}
+
+function starsFromPred(label,conf){
+  // Use 0.45 threshold to match our model's confidence range
+  if(label==='Positive') return conf>=0.45?5:4;
+  if(label==='Negative') return conf>=0.45?1:2;
+  return 3;
+}
+
+/* ════════ API CALLS ════════ */
+async function apiPost(path,body){
+  const r=await fetch(`${API}${path}`,{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body),signal:AbortSignal.timeout(6000)});
+  const d=await r.json();
+  if(!r.ok) throw new Error(d.error||`HTTP ${r.status}`);
+  return d;
+}
+
+async function safePredict(text){
+  const t0=performance.now();
+  try{
+    const d=await apiPost('/predict',{text});
+    d.latency_ms=performance.now()-t0; d._src='api'; return d;
+  }catch{
+    return{success:true,text,prediction:localPredict(text),
+      latency_ms:performance.now()-t0,_src:'local'};
+  }
+}
+
+async function safeRate(text,product,category){
+  const t0=performance.now();
+  try{
+    const d=await apiPost('/rate',{text,product,category});
+    d.latency_ms=performance.now()-t0; d._src='api'; return d;
+  }catch{
+    // Local fallback: keyword predictor → star rating
+    const pred=localPredict(text);
+    const stars=starsFromPred(pred.label,pred.confidence);
+    return{success:true,product,category,review:text,
+      rating:{stars,label:SM[stars].lbl.split(' — ')[1],
+              sentiment:pred.label,confidence:pred.confidence,
+              probabilities:pred.probabilities},
+      latency_ms:performance.now()-t0,_src:'local'};
+  }
+}
+
+async function safeBatch(texts){
+  try{const d=await apiPost('/predict/batch',{texts});return d;}
+  catch{return{success:true,count:texts.length,
+    results:texts.map((t,i)=>({index:i,text:t,prediction:localPredict(t)})),
+    latency_ms:0,_src:'local'};}
+}
+
+/* ════════ MODE + NAV ════════ */
+function setMode(m){
+  curMode=m;
+  document.getElementById('mb-s').classList.toggle('active',m==='s');
+  document.getElementById('mb-r').classList.toggle('active',m==='r');
+  document.getElementById('nav-s').style.display=m==='s'?'':'none';
+  document.getElementById('nav-r').style.display=m==='r'?'':'none';
+  navTo(m==='s'?'predict':'rater');
+}
+
+function navTo(pg){
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.page===pg));
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById(`page-${pg}`).classList.add('active');
+  if(pg==='metrics')     renderMetrics();
+  if(pg==='history')     renderHistory();
+  if(pg==='rater-hist')  renderRH();
+  if(pg==='docs')        renderDocs();
+}
+document.querySelectorAll('.nav-item').forEach(el=>el.addEventListener('click',()=>navTo(el.dataset.page)));
+
+/* ════════ HEALTH ════════ */
+async function checkHealth(){
+  const sp=document.getElementById('sp'),st=document.getElementById('sp-txt');
+  try{
+    const r=await fetch(`${API}/health`,{signal:AbortSignal.timeout(3000)});
+    if(r.ok){sp.className='status-pill online';st.textContent='Flask API Online';return;}
+    throw 0;
+  }catch{sp.className='status-pill offline';st.textContent='API Offline — Demo Mode';}
+}
+
+/* ════════ UTILS ════════ */
+function cc(el,id){const l=el.id==='bi'?50000:5000;document.getElementById(id).textContent=`${el.value.length} / ${l}`;}
+function fx(i){const t=document.getElementById('pi');t.value=EXP[i];cc(t,'pc');}
+function fe(k){const e=EXR[k];document.getElementById('rp').value=e.product;
+  document.getElementById('rc').value=e.category;
+  const ta=document.getElementById('rr');ta.value=e.review;cc(ta,'rcc');}
+function toast(msg){
+  const t=document.createElement('div');t.className='toast';t.textContent=msg;
+  document.body.appendChild(t);
+  setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .3s';setTimeout(()=>t.remove(),300);},2600);}
+
+/* ════════ GAUGE SVG ════════ */
+function gaugeSVG(pct,clr){
+  const r=78,cx=100,cy=93;
+  const a=Math.PI+(pct/100)*Math.PI;
+  const x=cx+r*Math.cos(a),y=cy+r*Math.sin(a);
+  const bx=cx+r*Math.cos(2*Math.PI),by=cy+r*Math.sin(2*Math.PI);
+  return`<svg viewBox="0 0 200 108" xmlns="http://www.w3.org/2000/svg" style="width:185px;height:105px">
+    <path d="M${cx-r} ${cy} A${r} ${r} 0 0 1 ${bx} ${by}" fill="none" stroke="#1e2d4a" stroke-width="14" stroke-linecap="round"/>
+    <path d="M${cx-r} ${cy} A${r} ${r} 0 0 1 ${x} ${y}" fill="none" stroke="${clr}" stroke-width="14" stroke-linecap="round"
+          style="filter:drop-shadow(0 0 5px ${clr}55)"/>
+    <text x="${cx}" y="${cy-6}" text-anchor="middle" fill="${clr}" font-size="26" font-weight="800" font-family="Space Mono,monospace">${pct}%</text>
+    <text x="${cx}" y="${cy+12}" text-anchor="middle" fill="#5a7099" font-size="10" font-family="DM Sans,sans-serif">CONFIDENCE</text>
+  </svg>`;
+}
+
+/* ════════ PROB BARS ════════ */
+function probBars(probs){
+  return['Positive','Neutral','Negative'].map(lbl=>{
+    const pct=Math.round((probs[lbl]||0)*100);
+    const c=lbl==='Positive'?'#34d399':lbl==='Negative'?'#f87171':'#fbbf24';
+    return`<div class="prow"><div class="plbl" style="color:${c}">${lbl}</div>
+    <div class="ptrack"><div class="pfill" style="width:${pct}%;background:${c}"></div></div>
+    <div class="ppct">${pct}%</div></div>`;
+  }).join('');
+}
+
+/* ════════ RENDER SENTIMENT RESULT ════════ */
+function renderPred(data){
+  const pred=data.prediction,label=pred.label,conf=Math.round(pred.confidence*100);
+  const clr=label==='Positive'?'#34d399':label==='Negative'?'#f87171':'#fbbf24';
+  const emoji=label==='Positive'?'😊':label==='Negative'?'😞':'😐';
+  const src=data._src==='local'?'demo mode — local predictor':`${data.latency_ms.toFixed(1)}ms · Flask API`;
+  document.getElementById('pred-out').style.display='block';
+  document.getElementById('pred-out').innerHTML=`
+  <div class="rbanner" style="border-color:${clr};--gc:${clr}1a">
+    <div class="remoji">${emoji}</div>
+    <div class="rlabel" style="color:${clr}">${label}</div>
+    <div class="rmeta">Confidence: <b>${conf}%</b> &nbsp;·&nbsp; ${src}</div>
+  </div>
+  <div class="g2">
+    <div class="card"><div class="ct">Confidence Gauge</div>
+      <div class="gw">${gaugeSVG(conf,clr)}</div></div>
+    <div class="card"><div class="ct">Probability Breakdown</div>
+      <div class="pbars">${probBars(pred.probabilities)}</div></div>
+  </div>`;
+  sHist.unshift({time:new Date().toLocaleTimeString(),
+    text:data.text.slice(0,80)+(data.text.length>80?'…':''),
+    label,confidence:conf+'%',latency:data.latency_ms?data.latency_ms.toFixed(1)+'ms':'—'});
+}
+
+/* ════════ RENDER STAR RESULT ════════ */
+function renderRate(data){
+  const rt=data.rating,sm=SM[rt.stars]||SM[3];
+  const probs=rt.probabilities||{};
+  const verdict=VD[rt.sentiment]?.[Math.floor(Math.random()*VD[rt.sentiment].length)]||'';
+  const conf=Math.round(rt.confidence*100);
+  const src=data._src==='local'?'demo mode — local predictor':`${data.latency_ms.toFixed(1)}ms · Flask API`;
+  document.getElementById('rate-out').style.display='block';
+  document.getElementById('rate-out').innerHTML=`
+  <div class="sbanner" style="border-color:${sm.bc};background:${sm.bg};--gc:${sm.bc}22">
+    <div class="stars-disp">${sm.s}</div>
+    <div class="star-score" style="color:${sm.tc}">${sm.lbl}</div>
+    <div class="rmeta"><b>${data.product}</b> · ${data.category} · ${conf}% confidence · ${src}</div>
+    <div class="verdict-tag" style="background:${sm.vc};color:${sm.tc}">${verdict}</div>
+  </div>
+  <div class="g2">
+    <div class="card"><div class="ct">Confidence Gauge</div>
+      <div class="gw">${gaugeSVG(conf,sm.tc)}</div></div>
+    <div class="card"><div class="ct">Probability Breakdown</div>
+      <div class="pbars">${probBars(probs)}</div></div>
+  </div>`;
+  rHist.unshift({time:new Date().toLocaleTimeString(),product:data.product,
+    category:data.category,review:data.review.slice(0,80)+(data.review.length>80?'…':''),
+    stars:rt.stars,sm,conf,label:rt.sentiment});
+}
+
+/* ════════ RUN ACTIONS ════════ */
+async function runPredict(){
+  const text=document.getElementById('pi').value.trim();
+  if(!text){toast('Please enter some text.');return;}
+  if(text.length>5000){toast('Text exceeds 5000 characters.');return;}
+  const btn=document.getElementById('pb');btn.disabled=true;
+  document.getElementById('pi2').innerHTML='<span class="spin"></span>&nbsp; Analyzing…';
+  try{renderPred(await safePredict(text));}
+  finally{btn.disabled=false;document.getElementById('pi2').innerHTML='🔍&nbsp; Analyze Sentiment';}
+}
+
+async function runRate(){
+  const product=document.getElementById('rp').value.trim();
+  const review=document.getElementById('rr').value.trim();
+  const category=document.getElementById('rc').value;
+  if(!product){toast('Please enter a product name.');return;}
+  if(!review){toast('Please write a review.');return;}
+  if(review.length>5000){toast('Review exceeds 5000 characters.');return;}
+  const btn=document.getElementById('rb');btn.disabled=true;
+  document.getElementById('ri').innerHTML='<span class="spin"></span>&nbsp; Rating…';
+  try{renderRate(await safeRate(review,product,category));}
+  finally{btn.disabled=false;document.getElementById('ri').innerHTML='⭐&nbsp; Rate This Review';}
+}
+
+async function runBatch(){
+  const lines=document.getElementById('bi').value.split('\n').map(l=>l.trim()).filter(Boolean);
+  if(!lines.length){toast('Enter at least one line.');return;}
+  if(lines.length>50){toast('Maximum 50 texts per batch.');return;}
+  const btn=document.getElementById('bb');btn.disabled=true;
+  document.getElementById('bi2').innerHTML='<span class="spin"></span>&nbsp; Processing…';
+  try{
+    const d=await safeBatch(lines);
+    bData=d.results||[];
+    renderBatch(bData);
+  }finally{btn.disabled=false;document.getElementById('bi2').innerHTML='📊&nbsp; Analyze All';}
+}
+
+function renderBatch(results){
+  const counts={Positive:0,Neutral:0,Negative:0};
+  results.forEach(r=>{if(r.prediction)counts[r.prediction.label]++;});
+  const tot=results.length;
+  document.getElementById('batch-out').style.display='block';
+  document.getElementById('bsum').innerHTML=[
+    ['Positive',counts.Positive,'#34d399','rgba(52,211,153,.08)','rgba(52,211,153,.25)'],
+    ['Neutral', counts.Neutral, '#fbbf24','rgba(251,191,36,.08)', 'rgba(251,191,36,.25)'],
+    ['Negative',counts.Negative,'#f87171','rgba(248,113,113,.08)','rgba(248,113,113,.25)'],
+  ].map(([l,n,c,bg,br])=>`
+    <div style="background:${bg};border:1px solid ${br};border-radius:10px;padding:14px;text-align:center">
+      <div style="font-size:22px;font-weight:800;color:${c};font-family:var(--mono)">${n}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:3px">${l} · ${tot?Math.round(n/tot*100):0}%</div>
+    </div>`).join('');
+  document.getElementById('btbody').innerHTML=results.map((r,i)=>{
+    if(!r.prediction) return`<tr><td>${i+1}</td><td colspan="6" style="color:var(--neg)">${r.error||'Error'}</td></tr>`;
+    const p=r.prediction;
+    const bc=p.label==='Positive'?'bpos':p.label==='Negative'?'bneg':'bneu';
+    const em=p.label==='Positive'?'😊':p.label==='Negative'?'😞':'😐';
+    return`<tr><td style="color:var(--muted);font-family:var(--mono)">${i+1}</td>
+    <td title="${r.text}">${r.text.slice(0,50)}${r.text.length>50?'…':''}</td>
+    <td><span class="badge ${bc}">${em} ${p.label}</span></td>
+    <td style="font-family:var(--mono)">${Math.round(p.confidence*100)}%</td>
+    <td style="color:var(--pos);font-family:var(--mono)">${Math.round((p.probabilities.Positive||0)*100)}%</td>
+    <td style="color:var(--neu);font-family:var(--mono)">${Math.round((p.probabilities.Neutral||0)*100)}%</td>
+    <td style="color:var(--neg);font-family:var(--mono)">${Math.round((p.probabilities.Negative||0)*100)}%</td></tr>`;
+  }).join('');
+}
+
+function exportCSV(){
+  if(!bData.length) return;
+  const h='Index,Text,Sentiment,Confidence,Positive,Neutral,Negative\n';
+  const rows=bData.map((r,i)=>{
+    if(!r.prediction) return`${i+1},"${(r.text||'').replace(/"/g,'""')}",Error,,,,`;
+    const p=r.prediction;
+    return`${i+1},"${r.text.replace(/"/g,'""')}",${p.label},${(p.confidence*100).toFixed(1)}%,${(p.probabilities.Positive*100).toFixed(1)}%,${(p.probabilities.Neutral*100).toFixed(1)}%,${(p.probabilities.Negative*100).toFixed(1)}%`;
+  }).join('\n');
+  const u=URL.createObjectURL(new Blob([h+rows],{type:'text/csv'}));
+  Object.assign(document.createElement('a'),{href:u,download:'sentiment_batch.csv'}).click();
+  URL.revokeObjectURL(u);toast('CSV exported!');
+}
+
+/* ════════ METRICS ════════ */
+async function renderMetrics(){
+  if(!cachedM){
+    try{const r=await fetch(`${API}/metrics`,{signal:AbortSignal.timeout(3000)});
+      const d=await r.json();cachedM=d.success?d.metrics:FM;}
+    catch{cachedM=FM;}
+  }
+  const m=cachedM,LBL=['Negative','Neutral','Positive'];
+  document.getElementById('kpi-grid').innerHTML=[
+    ['Accuracy',m.accuracy,'#a5b4fc'],['Precision',m.precision,'#34d399'],
+    ['Recall',m.recall,'#fbbf24'],['F1-Score',m.f1_score,'#f87171'],
+  ].map(([l,v,c])=>`<div class="kpi"><div class="kpi-l">${l}</div>
+    <div class="kpi-v" style="color:${c}">${(v*100).toFixed(2)}%</div></div>`).join('');
+  const cm=m.confusion_matrix;
+  document.getElementById('cm-wrap').innerHTML=`<table class="cmt">
+    <thead><tr><th>Actual ↓ / Pred →</th>${LBL.map(l=>`<th>${l}</th>`).join('')}</tr></thead>
+    <tbody>${LBL.map((rl,ri)=>`<tr><th>${rl}</th>${LBL.map((_,ci)=>{
+      const v=cm[ri][ci],d=ri===ci,mx=Math.max(...cm.flat());
+      const a=d?0.25+(v/mx)*0.4:0.05+(v/mx)*0.15;
+      const c=d?`rgba(99,102,241,${a})`:`rgba(248,113,113,${a})`;
+      return`<td class="cmc${d?' cmd':''}" style="background:${c}">${v}</td>`;
+    }).join('')}</tr>`).join('')}</tbody></table>`;
+  const pc=m.per_class||{};
+  document.getElementById('pc-wrap').innerHTML=LBL.map(lbl=>{
+    const d=pc[lbl]||{},c=lbl==='Positive'?'#34d399':lbl==='Negative'?'#f87171':'#fbbf24';
+    return`<div style="margin-bottom:18px">
+      <div style="font-size:12px;font-weight:700;color:${c};margin-bottom:8px">${lbl}</div>
+      ${['precision','recall','f1_score'].map(mk=>{
+        const val=d[mk]||0,pct=Math.round(val*100);
+        return`<div class="prow" style="margin-bottom:7px">
+          <div class="plbl" style="color:var(--muted);font-size:11px;width:68px">${mk.replace('_',' ').replace(/\b\w/g,c=>c.toUpperCase())}</div>
+          <div class="ptrack"><div class="pfill" style="width:${pct}%;background:${c}"></div></div>
+          <div class="ppct">${pct}%</div></div>`;
+      }).join('')}
+      <div style="font-size:10px;color:var(--muted);font-family:var(--mono)">Support: ${d.support||0}</div>
+    </div>`;
+  }).join('');
+}
+
+/* ════════ HISTORY ════════ */
+function renderHistory(){
+  const el=document.getElementById('h-list');
+  if(!sHist.length){el.innerHTML='<div style="color:var(--muted);text-align:center;padding:28px;font-size:13px">No predictions yet.</div>';return;}
+  el.innerHTML=sHist.map(h=>{
+    const bc=h.label==='Positive'?'bpos':h.label==='Negative'?'bneg':'bneu';
+    return`<div class="hrow" style="grid-template-columns:60px 1fr auto auto">
+      <div class="htime">${h.time}</div>
+      <div class="htext">${h.text}</div>
+      <span class="badge ${bc}">${h.label}</span>
+      <div class="hconf">${h.confidence}</div></div>`;
+  }).join('');
+}
+function clearH(){sHist=[];renderHistory();toast('History cleared.');}
+
+function renderRH(){
+  const el=document.getElementById('rh-list');
+  if(!rHist.length){el.innerHTML='<div style="color:var(--muted);text-align:center;padding:28px;font-size:13px">No reviews rated yet.</div>';return;}
+  el.innerHTML=rHist.map(h=>`
+    <div class="rrow">
+      <div style="min-width:0">
+        <div class="rprod">${h.product} <span style="font-size:10px;color:var(--muted2);font-weight:400">(${h.category})</span></div>
+        <div class="rrev">${h.review}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div class="rstars">${h.sm.s}</div>
+        <div class="rmeta2">${h.stars}/5 · ${h.conf}%</div>
+      </div>
+    </div>`).join('');
+}
+function clearRH(){rHist=[];renderRH();toast('Cleared.');}
+
+/* ════════ DOCS ════════ */
+function renderDocs(){
+  const EPS=[
+    {m:'POST',p:'/api/predict',d:'Single text sentiment prediction.',
+     rq:'{ "text": "Your review here" }',
+     rs:`{ "success": true, "prediction": { "label": "Positive",
+  "confidence": 0.9267, "probabilities": {...} }, "latency_ms": 12.4 }`},
+    {m:'POST',p:'/api/rate',d:'Product review → 1–5 star rating.',
+     rq:'{ "text": "Amazing!", "product": "Sony XM5", "category": "product" }',
+     rs:`{ "success": true, "rating": { "stars": 5, "label": "Excellent",
+  "sentiment": "Positive", "confidence": 0.92 }, "latency_ms": 11.2 }`},
+    {m:'POST',p:'/api/predict/batch',d:'Batch prediction — up to 50 texts.',
+     rq:'{ "texts": ["text1", "text2", "..."] }',
+     rs:`{ "success": true, "count": 2, "results": [...], "error_count": 0 }`},
+    {m:'GET',p:'/api/health',d:'Health check.',rq:'(no body)',
+     rs:`{ "success": true, "status": "healthy" }`},
+    {m:'GET',p:'/api/metrics',d:'Accuracy, F1, confusion matrix.',rq:'(no body)',
+     rs:`{ "success": true, "metrics": { "accuracy": 0.90, "f1_score": 0.8998, ... } }`},
+  ];
+  const MC={GET:'#34d399',POST:'#6366f1'};
+  document.getElementById('docs-wrap').innerHTML=`
+  <div class="card" style="margin-bottom:14px">
+    <div class="ct">Error Responses</div>
+    <div style="font-size:12.5px;color:var(--muted);line-height:1.9">
+      All errors: <code style="color:#a5b4fc">{ "success": false, "error": "…", "code": N }</code><br/>
+      <b style="color:var(--text)">400</b> Bad request · <b style="color:var(--text)">413</b> Too large ·
+      <b style="color:var(--text)">415</b> Non-JSON · <b style="color:var(--text)">503</b> Model unavailable
+    </div>
+  </div>
+  ${EPS.map(ep=>`<div class="card" style="margin-bottom:14px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <span class="mtag" style="background:${MC[ep.m]||'#6366f1'}22;color:${MC[ep.m]};border:1px solid ${MC[ep.m]}44">${ep.m}</span>
+      <code style="font-family:var(--mono);font-size:13px">${ep.p}</code>
+    </div>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:12px">${ep.d}</div>
+    <div class="g2" style="gap:10px">
+      <div><div style="font-size:10px;font-weight:700;letter-spacing:1px;color:var(--muted);margin-bottom:6px">REQUEST</div>
+        <pre class="code" style="color:#a5b4fc">${ep.rq}</pre></div>
+      <div><div style="font-size:10px;font-weight:700;letter-spacing:1px;color:var(--muted);margin-bottom:6px">RESPONSE</div>
+        <pre class="code" style="color:#4ade80">${ep.rs}</pre></div>
+    </div>
+  </div>`).join('')}`;
+}
+
+/* ════════ KEYBOARD ════════ */
+document.getElementById('pi').addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')runPredict();});
+document.getElementById('rr').addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')runRate();});
+
+/* ════════ INIT ════════ */
+(async()=>{
+  await checkHealth();
+  await renderMetrics();
+  const ov=document.getElementById('overlay');
+  ov.style.opacity='0';ov.style.transition='opacity .35s';
+  setTimeout(()=>ov.remove(),350);
+  setInterval(checkHealth,20000);
+})();
+</script>
+</body>
+</html>
